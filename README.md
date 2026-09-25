@@ -30,4 +30,4 @@ The real surveillance data cannot be shared because sampling was conducted on pr
                               dispersion in cell selection (1, 5)
 
 ## SOFTWARE
-Produced using R v4.3.1 (R Core Team 2024)
+Produced using R v4.3.1 (R Core Team 2024). See BST_DBSCA_synthetic_example_v1-1.R for full session info. 

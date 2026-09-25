@@ -28,8 +28,7 @@
 ##                           locations, EPSG:3308, with fields x, y, operation
 ##   - error_df.csv        : lookup table of expected detection probability
 ##                           (detect_prob) by sample size (n), from the
-##                           two-stage sampling model (see Supplementary
-##                           Figure S2)
+##                           two-stage sampling model (see Supplementary Fig S2)
 
 ## KEY PARAMETERS 
 ##   pstar_among/pstar_within : design prevalence assumptions (0.05 / 0.1)
@@ -37,7 +36,7 @@
 ##   risk_pref                : relative risk weighting by category (9:7:3:1)
 ##   eps/minpts               : DBSCAN neighbourhood radius (10 km) and
 ##                              minimum cluster size (5 pigs)
-##   a, b                     : weights balancing search value vs. spatial
+##   a, b                     : weights balancing search value vs spatial
 ##                              dispersion in cell selection (1, 5)
 
 ## SOFTWARE
@@ -254,6 +253,7 @@ b <- 5
     selected_prior <- rbind(selected_prior, remaining_prior[best_index, ])
     remaining_prior <- remaining_prior[-best_index, ]
   }
+  
 #Assign a rank. Highest number = greatest search value
 selected_prior$rank <- c(nrow(selected_prior):1) 
 selected_prior <- selected_prior |>
@@ -299,7 +299,7 @@ ggplot() +
         legend.text = element_text(size = 10))
 
 # Set clustering parameters
-eps <- 10     # spatial extent (kms)
+eps <- 10     # cluster neighbourhood radius (kms)
 minpts <- 5   # minimum number of points to qualify as a cluster
 
 nrow(pig_sp)                      # N animals sampled   
@@ -360,7 +360,8 @@ effort_weights_1  <- effort_wt_fun(cl_grid$cluster, cl_grid$search_cat)
 error_df <- read.csv("error_df.csv") |>
   arrange(desc(n)) 
 
-# New fields to hold updated search value and identify whether a cell has been searched
+# New fields to hold updated search value and identify whether 
+# a cell has been searched
 cl_grid$searched <- new_search_value <- 0
 cl_grid$searched[which(is.na(cl_grid$cluster)==F)] <- 1
 
@@ -477,7 +478,8 @@ selected_1 <- selected_1 |>
 
 # Plot selected cells
 ggplot() +
-   geom_sf(data = LS_grid_1, aes(fill = new_search_value), colour=NA, show.legend=T) +
+   geom_sf(data = LS_grid_1, aes(fill = new_search_value), colour=NA, 
+           show.legend=T) +
    geom_sf(data = selected_1, colour = "white", size = 1, fill = NA) +
    scale_fill_scico(palette = "lajolla", direction = -1, 
                            name="Expected search value") +
@@ -533,7 +535,8 @@ boot_realised_se_sys <- function(hulls, dat, B = 2000, ...) {
 set.seed(666)
 realised_SSe_CI <- round(boot_realised_se_sys(hulls,  dat), 3)
 
-paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1], ", ", realised_SSe_CI[3], ")")
+paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
+       ", ", realised_SSe_CI[3], ")")
 
 ## Session info ================================================================
 # setting  value
@@ -549,7 +552,7 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
 # rstudio  2025.05.0+496 Mariposa Orchid (desktop)
 # pandoc   3.4 @ C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools/ (via rmarkdown)
 
-# Packages ─--──────────────────────────────────────────────────────────────────
+# Packages ─────────────────────────────────────────────────────────────────────
 # package           * version date (UTC) lib source
 # askpass             1.2.0   2023-09-03 [1] CRAN (R 4.3.2)
 # BiasedUrn           2.0.12  2024-06-16 [1] CRAN (R 4.3.3)
