@@ -66,12 +66,12 @@ LS_grid <- readRDS(here("input", "LS_grid_preload.RDS")) |>
   st_transform(4326)
 
 ## Introduction risk weights (sum to 1) ========================================
-LS_pig_w    <- 0.51   # Feral pig density
+LS_pig_w <- 0.51   # Feral pig density
 LS_cattle_w <- 0.10   # Cattle density: primary host
-LS_sheep_w  <- 0.08   # Sheep density: maintenance host
-LS_goat_w   <- 0.08   # Goat density: maintenance host
-LS_deer_w   <- 0.08   # Deer density: maintenance host
-LS_point_w  <- 0.15   # Piggeries, saleyards and feedlots
+LS_sheep_w <- 0.08   # Sheep density: maintenance host
+LS_goat_w <- 0.08   # Goat density: maintenance host
+LS_deer_w <- 0.08   # Deer density: maintenance host
+LS_point_w <- 0.15   # Piggeries, saleyards and feedlots
 
 ## Feral pig density layer =====================================================
 
@@ -97,7 +97,7 @@ if(1==2){
  feralpigs[feralpigs > 1]    <- 0     # Remove any other/unexpected values
 
  # Fit to grid using mean raster value for each grid cell
- LS_grid <- LS_grid %>%
+ LS_grid <- LS_grid |>
    mutate(LS_pig = terra_extract_mean(feralpigs, LS_grid))
 }
 
@@ -114,7 +114,7 @@ cattle_range <- minmax(cattle, compute = TRUE)
 cattle <- (cattle - cattle_range[1]) / (cattle_range[2] - cattle_range[1])
 
 # Fit to grid using mean raster value for each grid cell
-LS_grid <- LS_grid %>%
+LS_grid <- LS_grid |>
   mutate(LS_cattle = terra_extract_mean(cattle, LS_grid))
 
 
@@ -128,7 +128,7 @@ sheep[sheep > 6500] <- 0
 sheep_range <- minmax(sheep, compute = TRUE)
 sheep <- (sheep - sheep_range[1]) / (sheep_range[2] - sheep_range[1])
 
-LS_grid <- LS_grid %>%
+LS_grid <- LS_grid |>
   mutate(LS_sheep = terra_extract_mean(sheep, LS_grid))
 
 ## Point hazards: piggeries, saleyards and feedlots ============================
@@ -144,7 +144,7 @@ if(1 == 2){
 
  risk_points <- bind_rows(feedlots[, c("category", "lat", "lon")],
                           piggeries[, c("category", "lat", "lon")],
-                          saleyards[, c("category", "lat", "lon")]) %>%
+                          saleyards[, c("category", "lat", "lon")]) |>
     st_as_sf(coords = c("lon", "lat"), crs = st_crs(4326))
 
  points_3308  <- st_transform(risk_points, 3308)
@@ -157,18 +157,7 @@ if(1 == 2){
 
 ## Combine layers ==============================================================
 
-# Check completeness of each cell - 
-# some boundary cells may be missing raster risk layers
-
-component_cols <- c("LS_pig", "LS_cattle", "LS_sheep", "LS_goats", "LS_deer", "LS_points")
-n_incomplete <- sum(!complete.cases(st_drop_geometry(LS_grid)[component_cols]))
-if (n_incomplete > 0) {
-  message(n_incomplete, " of ", nrow(LS_grid),
-          " grid cells have at least one missing risk component and will be",
-          " scored using only their available layers (rowSums na.rm = TRUE).")
-}
-
-LSw <- st_drop_geometry(LS_grid) %>%
+LSw <- st_drop_geometry(LS_grid) |>
   transmute(LS_pig = LS_pig * LS_pig_w,
             LS_cattle = LS_cattle * LS_cattle_w,
             LS_sheep = LS_sheep * LS_sheep_w,
@@ -177,7 +166,7 @@ LSw <- st_drop_geometry(LS_grid) %>%
             LS_points = LS_points * LS_point_w)
 
 # Sum total weighted risk for each cell and rescale to 0-1
-LS_grid <- LS_grid %>%
+LS_grid <- LS_grid |>
   mutate(LS_tot = range01(rowSums(LSw, na.rm = TRUE)))
 
 LS_grid_cat <- LS_grid
@@ -186,8 +175,8 @@ LS_grid_cat <- LS_grid
 # Target: mean(high) : mean(moderate) : mean(low) : mean(very low)
 #         approx. 9 : 7 : 3 : 1
 # Solve for the three quantile cut-points of LS_tot that come closest to
-# producing group means in the ratio above, using an unconstrained-but-bounded
-# optimiser over the cut quantiles.
+# producing group means in the ratio above, using a bounded optimiser over 
+# the cut quantiles.
 
 risk_weights <- c(high = 9, moderate = 7, low = 3, very_low = 1)
 
@@ -197,25 +186,36 @@ category_breaks <- function(values, grp) {
 }
 
 objective <- function(p, values) {
-  p <- sort(p, decreasing = TRUE)
-  cuts <- tryCatch(quantile(values, probs = p, na.rm = T), error = function(e) NULL)
+  # ensure p[1] > p[2] > p[3], so that cuts[1] > cuts[2] > cuts[3]
+  p <- sort(p, decreasing = TRUE) 
+  # convert probabilities to actual cut values
+  cuts <- quantile(values, probs = p, na.rm = T)
+  # Reject this parameter set if quantile() failed
+  # or if > 1 cut point lands on the same value
+  # The large penalty pushes optim() away without crashing
   if (is.null(cuts) || anyDuplicated(cuts)) return(1e6) 
+  # Build the four breakpoints for cut()
   grp_breaks <- c(-Inf, cuts[3], cuts[2], cuts[1], Inf)
+  # Assign each cell's LS_tot value to a category
   grp <- category_breaks(values, grp_breaks)
+  # Mean LS_tot in each category, to check performance
   means <- tapply(values, grp, mean)
-  
-  if (any(is.na(means)) || any(!is.finite(means))) return(1e6)
+  # Extract reference mean from "very low" category
   vh <- means["very low"]
+  # Penalise any zero or non-finite mean for "very low" that will cause a failure
   if (!is.finite(vh) || vh == 0) return(1e6)  
-  
+  # Express target weights for each category as a ratio relative to "very low"
   target_ratio <- risk_weights[c("high", "moderate", "low")] / risk_weights["very_low"]
+  # Objective: sum of squares between achieved and target mean ratios
+  # optim() will search for the cut quantiles (`p`) that minimise this error
+  # and come closest to the target 9:7:3:1 relationship
+  # err == 0 is a perfect match
   err <- sum((c(means["high"], means["moderate"], means["low"]) / vh - target_ratio) ^ 2)
   err
 }
 
 # Optimiser starting values
 props <- risk_weights / sum(risk_weights)
-
 p1 <- 1 - props["high"]
 p2 <- 1 - (props["high"] + props["moderate"])
 p3 <- 1 - (props["high"] + props["moderate"] + props["low"])
@@ -233,11 +233,11 @@ cuts  <- quantile(LS_grid_cat$LS_tot, probs = p_opt, na.rm = TRUE)
 
 grp_check <- category_breaks(LS_grid$LS_tot, c(-Inf, cuts[3], cuts[2], cuts[1], Inf))
 achieved_means <- tapply(LS_grid$LS_tot, grp_check, mean)
-message("Achieved risk ratios relative to 'very low' (target 9 / 7 / 3 / 1):")
-print(round(achieved_means / achieved_means["very low"], 2))
+message("Achieved risk ratios relative to 'very low' (target 1 / 3 / 7 / 9):") 
+round(achieved_means / achieved_means["very low"], 2)
 
 # Final categories
-LS_grid <- LS_grid_cat %>%
+LS_grid <- LS_grid_cat |>
   mutate(
     risk_category = category_breaks(LS_tot, c(-Inf, cuts[3], cuts[2], cuts[1], Inf)),
     risk_category = factor(risk_category, 
@@ -252,18 +252,13 @@ LS_grid <- LS_grid_cat |>
   mutate(risk_category = factor(
     risk_category, levels = c("high", "moderate", "low", "very low")))
 
-LS_grid |>
-  st_drop_geometry() |>
-  group_by(risk_category) |>
-  summarise(n = n())
-
 ## Plots ========================================================================
 
 ggplot() +
   geom_sf(aes(fill = LS_tot), col = NA, data = LS_grid, show.legend = TRUE) +
   scico::scale_fill_scico(palette = "lajolla", direction = -1, name = "Risk") +
   theme_void() +
-  labs(title = "Total expected introduction risk (continuous, 0-1)")
+  labs(title = "Total expected introduction risk (continuous, 0:1)")
 
 
 ggplot() +
@@ -271,6 +266,9 @@ ggplot() +
   scale_fill_manual(values = c("red4", "orange3", "khaki", "grey"), name = "Risk") +
   theme_void() +
   labs(title = "Total expected introduction risk (categorical)")
+
+# Save for use in `BST_DBSCAN_synthetic_example_v1-1.R`
+st_write(LS_grid, here("input", "FMDV_risk_4326_v3.shp"), append = FALSE)
 
 ## Session info ================================================================
 

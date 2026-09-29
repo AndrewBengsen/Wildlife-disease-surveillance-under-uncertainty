@@ -20,10 +20,10 @@
 ## code structure and parameter choices otherwise match the Methods.
 
 ## REQUIRED INPUTS 
-##   - FMDV_risk_3308_v3   : polygon layer (.shp) of the hexagonal
+##   - FMDV_risk_4326_v3   : polygon layer (.shp) of the hexagonal
 ##                           risk grid, with fields LS_pig, LS_tt_c, LS_tot,
-##                           cell (see Table 1 of the manuscript for the
-##                           component risk layers this is built from)
+##                           cell.
+##                           Created in `Create_prior_risk_surface_v1-1.R`
 ##   - synthetic_pigs_3308.RDS : sf point object of synthetic pig sample
 ##                           locations, EPSG:3308, with fields x, y, operation
 ##   - error_df.csv        : lookup table of expected detection probability
@@ -81,15 +81,12 @@ effort_wt_fun <- function(cluster_current, risk_cat_prior){
 ## Load the prior risk map =====================================================
 
 # LS_tot provides a risk rating for each cell, in the range 0:1
-dat <- st_read(dsn = getwd(), layer = "FMDV_risk_3308_v3") |>
-  mutate(risk_cat = factor(LS_tt_c, 
+# Transform from EPSG:4326 to projected EPSG:3308
+dat <- st_read("input", "FMDV_risk_4326_v3") |>
+  mutate(risk_cat = factor(rsk_ctg, 
                            levels = c("very low", "low", "moderate", "high"))) |>
-  # mutate(risk_prior2 = recode(risk_cat, 
-  #                             "very low" = 0.0001, 
-  #                             "low" = 0.001, 
-  #                             "moderate" = 0.005, 
-  #                             "high" = 0.01)) |>
-  dplyr::select(cell, pig_dens = LS_pig, LS_tot, risk_cat) 
+  dplyr::select(cell, pig_dens = LS_pig, LS_tot, risk_cat) |>
+  st_transform(3308)
 
 # Create a risk prior that sums to 1 across the state
 dat$risk_prior <- dat$LS_tot / sum(dat$LS_tot)
@@ -161,11 +158,13 @@ res <- optim(par = par_init,
              lower = c(0.3, 0.05, 0.001),
              upper = c(0.99, 0.8, 0.5))
 
-# NB: the optimiser fails to converge here, because it's a difficult problem,
+# NB: the optimiser can fail to converge here, because it's a difficult problem,
 # but it returns the best values that it had found up to that point. 
-# However, vv << oo below, suggesting that a sensible solution had been found. 
+# However, vv << oo below, suggesting that a sensible solution has been found. 
+
 oo <- objective(par_init, df$risk_prior)
 vv <- res$value
+vv/oo
 
 p_opt <- sort(res$par, decreasing = TRUE)
 
@@ -283,7 +282,7 @@ ggplot() +
 # The real data can not be made public for privacy reasons.
 
 # sf object, projected crs = EPSG:3308
-pig_sp <- readRDS("synthetic_pigs_3308.RDS")
+pig_sp <- readRDS(here("input", "synthetic_pigs_3308.RDS"))
 
 ggplot() +
   geom_sf(data = LS_grid, aes(), fill="grey", colour=NA, show.legend=F) +
@@ -315,7 +314,7 @@ pig_sp$cluster <- Dbscan_p$cluster
 length(unique(pig_sp$cluster))-1    # N clusters (-1 to exclude non-cluster 0's)
 length(which(pig_sp$cluster == 0))  # N pigs outside of a cluster
 
-# Create a minuimum convex polygon hull around each sample 
+# Create a minimum convex polygon hull around each sample 
 # with an outer buffer of 0.5\*eps 
 hulls <- pig_sp |>
   filter(!cluster %in% c(0)) |> 
@@ -490,7 +489,13 @@ ggplot() +
 
 ## Given the sampling effort, what was the realised SSe? =======================
 
-# Assign a dominant risk_cat (from the fixed original map) to each cluster
+# Assign a dominant risk category (from the fixed original map) to each cluster
+# Use the original map, not the updated map, because updating occurs every three
+# months, but looks back over a 12 month window. Using the updated map would 
+# assign many of the samples being considered to a "very low" risk category that
+# was only "very low" because of the presence of those samples.
+# This would greatly, and incorrectly, downgrade SSe
+
 assign_cluster_risk <- function(hulls, dat) {
   ints <- st_intersects(hulls, dat)
   rg_lab <- sapply(ints, function(idx) {
@@ -503,7 +508,7 @@ assign_cluster_risk <- function(hulls, dat) {
 
 # Bootstrap confidence intervals for SSe using the deterministic rsu.sep.rb2st()  
 # Resample the clusters (rows of hulls) with replacement, 
-# recalculate se.p each time, take percentiles
+# calculate se.p, take percentiles
 
 boot_realised_se_sys <- function(hulls, dat, B = 2000, ...) {
   rg_fac <- assign_cluster_risk(hulls, dat)
