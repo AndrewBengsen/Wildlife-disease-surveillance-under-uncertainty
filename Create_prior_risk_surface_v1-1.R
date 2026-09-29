@@ -62,25 +62,16 @@ range01 <- function(x) {
 
 ## Load background data ========================================================
 
-LS_grid <- readRDS(here("input", "LS_grid_preload.RDS"))
-
-# Protect against silent failures due to CRS incompatability
-stopifnot(!is.na(st_crs(LS_grid)))
-if (st_crs(LS_grid) != st_crs(4326)) {
-  LS_grid <- st_transform(LS_grid, 4326)
-}
+LS_grid <- readRDS(here("input", "LS_grid_preload.RDS")) |>
+  st_transform(4326)
 
 ## Introduction risk weights (sum to 1) ========================================
 LS_pig_w    <- 0.51   # Feral pig density
-LS_cattle_w <- 0.10   # Cattle density  - primary host
-LS_sheep_w  <- 0.08   # Sheep density   - maintenance host
-LS_goat_w   <- 0.08   # Goat density    - maintenance host
-LS_deer_w   <- 0.08   # Deer density    - maintenance host
+LS_cattle_w <- 0.10   # Cattle density: primary host
+LS_sheep_w  <- 0.08   # Sheep density: maintenance host
+LS_goat_w   <- 0.08   # Goat density: maintenance host
+LS_deer_w   <- 0.08   # Deer density: maintenance host
 LS_point_w  <- 0.15   # Piggeries, saleyards and feedlots
-
-stopifnot(isTRUE(all.equal(
-  sum(LS_pig_w, LS_cattle_w, LS_sheep_w, LS_goat_w, LS_deer_w, LS_point_w), 1
-)))
 
 ## Feral pig density layer =====================================================
 
@@ -88,14 +79,14 @@ stopifnot(isTRUE(all.equal(
 # not available to be reproduced here. An alternative version that can be
 # georeferenced can be found at:
 # https://www.dpird.nsw.gov.au/__data/assets/image/0006/1649733/Feral-pig-relative-abundance-2023-and-distribution-change-2020-2023.png
-#
-# Here, we have pre-loaded the output of the following process into LS_grid.
+
+# Here, we've pre-loaded the output of the following process into LS_grid.
 # This block is retained for transparency and is not run.
 if(1==2){
- feralpigs <- terra::rast(here("input", "Pig_2023_geotiff_3857.tif"))
- feralpigs <- terra::project(feralpigs, "EPSG:4326")
- feralpigs <- terra::crop(feralpigs, lls)
- feralpigs <- terra::project(feralpigs, "EPSG:4326", method = "near")
+ feralpigs <- rast(here("input", "Pig_2023_geotiff_3857.tif"))
+ feralpigs <- project(feralpigs, "EPSG:4326")
+ feralpigs <- crop(feralpigs, lls)
+ feralpigs <- project(feralpigs, "EPSG:4326", method = "near")
 
  # Recode class codes to a 0-1 scale (high -> 1, not-known-to-occur -> 0)
  feralpigs[feralpigs == 0]   <- 1     # High density
@@ -115,11 +106,11 @@ if(1==2){
 # Adapted from Gridded Livestock of the World database (FAO 2024)
 # https://data.amerigeoss.org/dataset/9d1e149b-d63f-4213-978b-317a8eb42d02
 
-cattle <- terra::rast(here("input", "5_Ct_2020_Da_clip_4326.tif"))
+cattle <- rast(here("input", "5_Ct_2020_Da_clip_4326.tif"))
 
 cattle[cattle > 6500] <- 0  # convert urban/sentinel errors to 0
 
-cattle_range <- terra::minmax(cattle, compute = TRUE)
+cattle_range <- minmax(cattle, compute = TRUE)
 cattle <- (cattle - cattle_range[1]) / (cattle_range[2] - cattle_range[1])
 
 # Fit to grid using mean raster value for each grid cell
@@ -131,10 +122,10 @@ LS_grid <- LS_grid %>%
 # Adapted from Gridded Livestock of the World database (FAO 2024)
 # https://data.amerigeoss.org/dataset/9d1e149b-d63f-4213-978b-317a8eb42d02
 
-sheep <- terra::rast(here("input", "5_Sh_2020_Da_clip_4326.tif"))
+sheep <- rast(here("input", "5_Sh_2020_Da_clip_4326.tif"))
 
 sheep[sheep > 6500] <- 0
-sheep_range <- terra::minmax(sheep, compute = TRUE)
+sheep_range <- minmax(sheep, compute = TRUE)
 sheep <- (sheep - sheep_range[1]) / (sheep_range[2] - sheep_range[1])
 
 LS_grid <- LS_grid %>%
@@ -220,23 +211,6 @@ objective <- function(p, values) {
   target_ratio <- risk_weights[c("high", "moderate", "low")] / risk_weights["very_low"]
   err <- sum((c(means["high"], means["moderate"], means["low"]) / vh - target_ratio) ^ 2)
   err
-}
-
-objective <- function(p, values) {
-  # enforce ordering
-  p <- sort(p, decreasing = TRUE)
-  cuts <- quantile(values, probs = p)
-  grp <- cut(values,
-             breaks = c(-Inf, cuts[3], cuts[2], cuts[1], Inf),
-             labels = c("very low","low","moderate","high"))
-  means <- tapply(values, grp, mean)
-  if (any(is.na(means))) return(1e6)
-  vh <- means["very low"]
-  err <- sum((
-    c(means["high"]/vh,
-      means["moderate"]/vh,
-      means["low"]/vh)- risk_weights[c("high","moderate","low")])^2)
-  return(err)
 }
 
 # Optimiser starting values
