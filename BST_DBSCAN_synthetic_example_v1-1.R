@@ -356,7 +356,7 @@ effort_weights_1  <- effort_wt_fun(cl_grid$cluster, cl_grid$search_cat)
 # Load a table showing how detection probability is expected to decline with
 # with diminishing sample sizes
 # (based on previously stated sample size assumptions)
-error_df <- read.csv("error_df.csv") |>
+error_df <- read.csv(here("input", "error_df.csv")) |>
   arrange(desc(n)) 
 
 # New fields to hold updated search value and identify whether 
