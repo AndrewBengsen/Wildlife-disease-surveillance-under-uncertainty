@@ -43,11 +43,12 @@
 ## Produced using R v4.3.1 (R Core Team 2024). 
 ## Full session info at the tail of this workflow
 
-library(tidyverse)          # v2.0.0
-library(sf)                 # v1.0-15
-library(dbscan)             # v1.2.2 
-library(epiR)               # v2.0.91
-library(scico)              # v1.5.0
+library(tidyverse)          
+library(sf)                 
+library(dbscan)              
+library(epiR)               
+library(scico)              
+library(here)
 
 ## Dependencies ================================================================
 
@@ -544,6 +545,7 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
        ", ", realised_SSe_CI[3], ")")
 
 ## Session info ================================================================
+
 # setting  value
 # version  R version 4.3.1 (2023-06-16 ucrt)
 # os       Windows 11 x64 (build 26200)
@@ -553,11 +555,11 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
 # collate  English_Australia.utf8
 # ctype    English_Australia.utf8
 # tz       Australia/Sydney
-# date     2026-09-25
+# date     2026-09-29
 # rstudio  2025.05.0+496 Mariposa Orchid (desktop)
 # pandoc   3.4 @ C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools/ (via rmarkdown)
-
-# Packages ─────────────────────────────────────────────────────────────────────
+# 
+# ─ Packages ───────────────────────────────────────────────────────────────────
 # package           * version date (UTC) lib source
 # askpass             1.2.0   2023-09-03 [1] CRAN (R 4.3.2)
 # BiasedUrn           2.0.12  2024-06-16 [1] CRAN (R 4.3.3)
@@ -590,6 +592,7 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
 # ggplot2           * 3.5.2   2025-04-09 [1] CRAN (R 4.3.1)
 # glue                1.7.0   2024-01-09 [1] CRAN (R 4.3.2)
 # gtable              0.3.4   2023-08-21 [1] CRAN (R 4.3.2)
+# here              * 1.0.1   2020-12-13 [1] CRAN (R 4.3.3)
 # hms                 1.1.3   2023-03-21 [1] CRAN (R 4.3.2)
 # htmltools           0.5.7   2023-11-03 [1] CRAN (R 4.3.2)
 # httpcode            0.3.0   2020-04-10 [1] CRAN (R 4.3.3)
@@ -620,7 +623,7 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
 # readr             * 2.1.5   2024-01-10 [1] CRAN (R 4.3.2)
 # rlang               1.1.3   2024-01-10 [1] CRAN (R 4.3.2)
 # rmarkdown           2.25    2023-09-18 [1] CRAN (R 4.3.2)
-# rsconnect           1.3.1   2024-06-04 [1] CRAN (R 4.3.1)
+# rprojroot           2.0.4   2023-11-05 [1] CRAN (R 4.3.2)
 # rstudioapi          0.15.0  2023-07-07 [1] CRAN (R 4.3.2)
 # scales              1.3.0   2023-11-28 [1] CRAN (R 4.3.2)
 # scico             * 1.5.0   2023-08-14 [1] CRAN (R 4.3.3)
@@ -648,5 +651,5 @@ paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
 # xtable              1.8-4   2019-04-21 [1] CRAN (R 4.3.2)
 # zip                 2.3.1   2024-01-27 [1] CRAN (R 4.3.2)
 # zoo                 1.8-12  2023-04-13 [1] CRAN (R 4.3.2)
-
+# 
 # [1] C:/Program Files/R/R-4.3.1/library
