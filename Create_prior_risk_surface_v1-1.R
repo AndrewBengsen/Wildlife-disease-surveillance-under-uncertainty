@@ -86,15 +86,13 @@ if(1==2){
  feralpigs <- rast(here("input", "Pig_2023_geotiff_3857.tif"))
  feralpigs <- project(feralpigs, "EPSG:4326")
  feralpigs <- crop(feralpigs, lls)
- feralpigs <- project(feralpigs, "EPSG:4326", method = "near")
 
  # Recode class codes to a 0-1 scale (high -> 1, not-known-to-occur -> 0)
  feralpigs[feralpigs == 0]   <- 1     # High density
  feralpigs[feralpigs == 115] <- 0.66  # Medium density
  feralpigs[feralpigs == 190] <- 0.33  # Low density
  feralpigs[feralpigs == 245] <- 0.33  # Present, assigned low density
- feralpigs[feralpigs == 225] <- 0     # Not known to occur
- feralpigs[feralpigs > 1]    <- 0     # Remove any other/unexpected values
+ feralpigs[feralpigs > 1] <- 0     # Not known to occur
 
  # Fit to grid using mean raster value for each grid cell
  LS_grid <- LS_grid |>
@@ -242,15 +240,6 @@ LS_grid <- LS_grid_cat |>
     risk_category = category_breaks(LS_tot, c(-Inf, cuts[3], cuts[2], cuts[1], Inf)),
     risk_category = factor(risk_category, 
                            levels = c("high", "moderate", "low", "very low")))
-
-# LS_grid <- LS_grid_cat |>
-#   mutate(risk_category = case_when(
-#     LS_tot >= cuts[1] ~ "high",
-#     LS_tot >= cuts[2] ~ "moderate",
-#     LS_tot >= cuts[3] ~ "low",
-#     TRUE ~ "very low")) |>
-#   mutate(risk_category = factor(
-#     risk_category, levels = c("high", "moderate", "low", "very low")))
 
 ## Plots ========================================================================
 

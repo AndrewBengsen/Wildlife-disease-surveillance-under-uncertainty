@@ -40,7 +40,7 @@
 ##                              dispersion in cell selection (1, 5)
 
 ## SOFTWARE
-## Produced using R v4.3.1 (R Core Team 2024). 
+## Produced using R v4.3.1 (R Core Team 2023). 
 ## Full session info at the tail of this workflow
 
 library(tidyverse)          
@@ -118,7 +118,6 @@ dat$likelihood <- SSe
 dat <- dat |>
    mutate(search_value = round(risk_prior * likelihood, 5)) |>
    dplyr::select(cell, risk_prior, risk_cat, likelihood, search_value)
-
 
 
 ## Select cells to balance risk rating and spatial dispersion ==================
