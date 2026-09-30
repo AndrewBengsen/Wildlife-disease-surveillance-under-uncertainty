@@ -243,14 +243,14 @@ LS_grid <- LS_grid_cat |>
     risk_category = factor(risk_category, 
                            levels = c("high", "moderate", "low", "very low")))
 
-LS_grid <- LS_grid_cat |>
-  mutate(risk_category = case_when(
-    LS_tot >= cuts[1] ~ "high",
-    LS_tot >= cuts[2] ~ "moderate",
-    LS_tot >= cuts[3] ~ "low",
-    TRUE ~ "very low")) |>
-  mutate(risk_category = factor(
-    risk_category, levels = c("high", "moderate", "low", "very low")))
+# LS_grid <- LS_grid_cat |>
+#   mutate(risk_category = case_when(
+#     LS_tot >= cuts[1] ~ "high",
+#     LS_tot >= cuts[2] ~ "moderate",
+#     LS_tot >= cuts[3] ~ "low",
+#     TRUE ~ "very low")) |>
+#   mutate(risk_category = factor(
+#     risk_category, levels = c("high", "moderate", "low", "very low")))
 
 ## Plots ========================================================================
 

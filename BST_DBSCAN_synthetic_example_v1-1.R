@@ -55,14 +55,6 @@ library(here)
 # Scale 0:1
 range01 <- function(x){(x-min(x, na.rm=T))/(max(x, na.rm=T)-min(x, na.rm=T))}
 
-# Categorise risk or search value
-classify_risk <- function(x, cuts){
-  factor(case_when(x >= cuts[1] ~ "high",
-                   x >= cuts[2] ~ "moderate",
-                   x >= cuts[3] ~ "low",
-                   TRUE         ~ "very low"),
-         levels = c("high", "moderate", "low", "very low"))}
-
 # update priors
 update.priors <- function(prior, detect_prob){
   detect_prob[is.na(detect_prob)] <- 0
@@ -122,67 +114,12 @@ proportional_rep <- proportion_by_risk$p
 SSe <- 0.95 
 dat$likelihood <- SSe 
 
-## Assign belief ===============================================================
-
-# Categorise expected search value based on risk weightings
-
-df <- arrange(dat, desc(risk_prior))
-
-objective <- function(p, values) {
-  p <- sort(p, decreasing = TRUE)
-  cuts <- quantile(values, probs = p)
-  grp <- cut(values,
-             breaks = c(-Inf, cuts[3], cuts[2], cuts[1], Inf),
-             labels = c("very low","low","moderate","high"))
-  means <- tapply(values, grp, mean)
-  if (any(is.na(means))) return(1e6)
-  vh <- means["very low"]
-  err <- sum((c(means["high"]/vh,
-                means["moderate"]/vh,
-                means["low"]/vh) - c(9, 7, 3))^2)
-  return(err)
-}
-
-props <- risk_pref / sum(risk_pref)
-
-# Convert to cumulative thresholds (from top)
-p1 <- 1 - props["high"]
-p2 <- 1 - (props["high"] + props["moderate"])
-p3 <- 1 - (props["high"] + props["moderate"] + props["low"])
-
-par_init <- c(p1, p2, p3)
-
-res <- optim(par = par_init, 
-             fn = objective,
-             values = df$risk_prior,
-             method = "L-BFGS-B",
-             lower = c(0.3, 0.05, 0.001),
-             upper = c(0.99, 0.8, 0.5))
-
-# NB: the optimiser can fail to converge here, because it's a difficult problem,
-# but it returns the best values that it had found up to that point. 
-# However, vv << oo below, suggesting that a sensible solution has been found. 
-
-oo <- objective(par_init, df$risk_prior)
-vv <- res$value
-vv/oo
-
-p_opt <- sort(res$par, decreasing = TRUE)
-
-cuts <- quantile(df$risk_prior, probs = p_opt)
-
+# Convert risk prior to search value prior =====================================
 dat <- dat |>
-  mutate(search_value = round(risk_prior * likelihood, 5)) |>
-  dplyr::select(cell, risk_prior, risk_cat, likelihood, search_value)
+   mutate(search_value = round(risk_prior * likelihood, 5)) |>
+   dplyr::select(cell, risk_prior, risk_cat, likelihood, search_value)
 
-dat <- dat |>
-  mutate(search_cat = case_when(
-    risk_prior >= cuts[1] * likelihood ~ "high",
-    risk_prior >= cuts[2] * likelihood ~ "moderate",
-    risk_prior >= cuts[3] * likelihood ~ "low",
-    TRUE ~ "very low")) |>
-  mutate(search_cat = factor(search_cat, 
-                             levels = c("high", "moderate", "low", "very low")))
+
 
 ## Select cells to balance risk rating and spatial dispersion ==================
 
@@ -271,7 +208,7 @@ ggplot() +
                           guide = guide_colourbar(title.position = "top"),
                           breaks = c(0, max_search_val),
                           labels = c("Low", "High")) +
-  labs(title = "Cells selected for surveuillance, prior to initial activities") +
+  labs(title = "Cells selected for surveillance, prior to initial activities") +
   theme_void() +
   theme(legend.position = "bottom",
         legend.text = element_text(size = 10))
@@ -348,9 +285,9 @@ ggplot() +
   labs(title = "Synthetic sample clusters") +
   theme_void()
 
-# Realised distribution of sampling effort among search value classes
+# Realised distribution of sampling effort among risk value classes
 # high value : very low value
-effort_weights_1  <- effort_wt_fun(cl_grid$cluster, cl_grid$search_cat)
+effort_weights  <- effort_wt_fun(cl_grid$cluster, cl_grid$risk_cat)
 
 ## Update search values (beliefs) based on realised search effort ==============
 
@@ -379,14 +316,6 @@ cl_grid$new_search_value <- update.priors(prior = cl_grid$risk_prior,
 
 # Check that the new search value sums to 1 across the state 
 sum(cl_grid$new_search_value)
-
-# Categorise new search value categories for cells
-risk_cuts <- quantile(dat$risk_prior, 
-                      probs = sort(p_opt, decreasing = TRUE),
-                      na.rm = TRUE)
-
-cl_grid$new_search_cat <- classify_risk(cl_grid$new_search_value, risk_cuts)
-table(cl_grid$new_search_cat)
 
 # Plot updated search values
 ggplot(cl_grid) + 
