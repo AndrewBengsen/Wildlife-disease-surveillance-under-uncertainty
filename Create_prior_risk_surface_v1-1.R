@@ -83,20 +83,22 @@ LS_point_w <- 0.15   # Piggeries, saleyards and feedlots
 # Here, we've pre-loaded the output of the following process into LS_grid.
 # This block is retained for transparency and is not run.
 if(1==2){
- feralpigs <- rast(here("input", "Pig_2023_geotiff_3857.tif"))
- feralpigs <- project(feralpigs, "EPSG:4326")
- feralpigs <- crop(feralpigs, lls)
-
- # Recode class codes to a 0-1 scale (high -> 1, not-known-to-occur -> 0)
- feralpigs[feralpigs == 0]   <- 1     # High density
- feralpigs[feralpigs == 115] <- 0.66  # Medium density
- feralpigs[feralpigs == 190] <- 0.33  # Low density
- feralpigs[feralpigs == 245] <- 0.33  # Present, assigned low density
- feralpigs[feralpigs > 1] <- 0     # Not known to occur
-
- # Fit to grid using mean raster value for each grid cell
- LS_grid <- LS_grid |>
-   mutate(LS_pig = terra_extract_mean(feralpigs, LS_grid))
+  feralpigs <- raster("Geographic/Ferals/Pig_2023_geotiff_3857.tif") 
+  feralpigs <- projectRaster(feralpigs, crs=4326)
+  feralpigs <- crop(feralpigs, lls)
+  
+  # Rescale
+  feralpigs[which(feralpigs[] == 0)] <- 1      # High density
+  feralpigs[which(feralpigs[] == 115)] <- 0.66 # Med density
+  feralpigs[which(feralpigs[] == 190)] <- 0.33 # Low density
+  feralpigs[which(feralpigs[] == 245)] <- 0.33 # Assign present as low density
+  feralpigs[which(feralpigs[] > 1)] <- 0       # Pigs not known to occur     
+  
+  feralpigs <- rast(feralpigs)  
+  
+  # Fit to grid using mean raster value for each grid cell
+  LS_grid <- LS_grid |>
+    mutate(LS_pig = terra_extract_mean(feralpigs, LS_grid))
 }
 
 
