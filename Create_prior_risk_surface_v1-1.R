@@ -188,26 +188,35 @@ category_breaks <- function(values, grp) {
 objective <- function(p, values) {
   # ensure p[1] > p[2] > p[3], so that cuts[1] > cuts[2] > cuts[3]
   p <- sort(p, decreasing = TRUE) 
+  
   # convert probabilities to actual cut values
   cuts <- quantile(values, probs = p, na.rm = T)
+  
   # Reject this parameter set if quantile() failed
   # or if > 1 cut point lands on the same value
-  # The large penalty pushes optim() away without crashing
-  if (is.null(cuts) || anyDuplicated(cuts)) return(1e6) 
+  # The large penalty pushes optim() away without crashing it
+  if (is.null(cuts) || anyDuplicated(cuts)) return(10^6) 
+  
   # Build the four breakpoints for cut()
   grp_breaks <- c(-Inf, cuts[3], cuts[2], cuts[1], Inf)
+  
   # Assign each cell's LS_tot value to a category
   grp <- category_breaks(values, grp_breaks)
+  
   # Mean LS_tot in each category, to check performance
   means <- tapply(values, grp, mean)
+  
   # Extract reference mean from "very low" category
   vh <- means["very low"]
+  
   # Penalise any zero or non-finite mean for "very low" that will cause a failure
-  if (!is.finite(vh) || vh == 0) return(1e6)  
+  if (!is.finite(vh) || vh == 0) return(10^6)  
+  
   # Express target weights for each category as a ratio relative to "very low"
   target_ratio <- risk_weights[c("high", "moderate", "low")] / risk_weights["very_low"]
+  
   # Objective: sum of squares between achieved and target mean ratios
-  # optim() will search for the cut quantiles (`p`) that minimise this error
+  # optim() will search for the cut quantiles (p) that minimise the error
   # and come closest to the target 9:7:3:1 relationship
   # err == 0 is a perfect match
   err <- sum((c(means["high"], means["moderate"], means["low"]) / vh - target_ratio) ^ 2)
