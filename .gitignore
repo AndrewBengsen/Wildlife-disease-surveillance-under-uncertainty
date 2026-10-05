@@ -9,3 +9,5 @@ ignore
 risk_surface_for_rendering.Rmd
 risk_surface_for_rendering.pdf
 process spatial layers FMDV for documentation 2026-07.Rmd
+BST_DBSCAN_real_data_v1-0.R
+Pig_2023_geotiff_3857.tif

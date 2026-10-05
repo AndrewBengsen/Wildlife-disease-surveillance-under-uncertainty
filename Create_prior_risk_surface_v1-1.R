@@ -46,15 +46,16 @@
 library(tidyverse)          
 library(sf)                 
 library(terra)              
+library(raster)
 library(here)                
 library(scico)
 
 ## Dependencies -----------------------------------------------------------
 
-terra_extract_mean <- function(r, polys, na.rm = TRUE) {
-  out <- terra::extract(r, terra::vect(polys), fun = mean, na.rm = na.rm, ID = FALSE)
-  as.numeric(out[[1]])
-}
+raster_extract = function(x, y, fun = NULL, na.rm = FALSE) {
+  x = as(x, "Raster")
+  y = as(y, "Spatial")
+  extract(x = x, y = y, fun = fun, na.rm = na.rm)}
 
 range01 <- function(x) {
   (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
@@ -64,6 +65,9 @@ range01 <- function(x) {
 
 LS_grid <- readRDS(here("input", "LS_grid_preload.RDS")) |>
   st_transform(4326)
+
+# Cropping layer, for standardisation
+lls <- st_read(here("input", "LLS_Layer.shp")) 
 
 ## Introduction risk weights (sum to 1) ========================================
 LS_pig_w <- 0.51   # Feral pig density
@@ -83,7 +87,7 @@ LS_point_w <- 0.15   # Piggeries, saleyards and feedlots
 # Here, we've pre-loaded the output of the following process into LS_grid.
 # This block is retained for transparency and is not run.
 if(1==2){
-  feralpigs <- raster("Geographic/Ferals/Pig_2023_geotiff_3857.tif") 
+  feralpigs <- raster(here("input", "Pig_2023_geotiff_3857.tif")) 
   feralpigs <- projectRaster(feralpigs, crs=4326)
   feralpigs <- crop(feralpigs, lls)
   
