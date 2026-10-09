@@ -52,10 +52,10 @@ library(scico)
 
 ## Dependencies -----------------------------------------------------------
 
-raster_extract = function(x, y, fun = NULL, na.rm = FALSE) {
-  x = as(x, "Raster")
-  y = as(y, "Spatial")
-  extract(x = x, y = y, fun = fun, na.rm = na.rm)}
+terra_extract_mean <- function(r, polys, na.rm = TRUE) {
+  out <- terra::extract(r, terra::vect(polys), fun = mean, na.rm = na.rm, ID = FALSE)
+  as.numeric(out[[1]])
+}
 
 range01 <- function(x) {
   (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
