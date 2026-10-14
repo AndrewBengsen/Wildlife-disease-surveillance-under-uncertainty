@@ -27,8 +27,8 @@
 ## https://www.dpird.nsw.gov.au/dpi/biosecurity/invasive-plants-and-animals/pest-animals/distribution-maps
 
 ## REQUIRED INPUTS (all under ./input/)
-## - LLS_Layer.shp                    Local Land Services region boundaries
-## - Buffer_NSW_50km_4326.shp         NSW + 50 km buffer, used to clip layers
+## - LLS_Layer.shp                    Local Land Services region boundaries,
+##                                    used to clip layers
 ## - LS_grid_preload.RDS              Pre-processed hex grid (see DATA note)
 ##                                    Columns: cell, LS_pig, LS_goats, LS_deer,
 ##                                    LS_points, geometry
@@ -63,7 +63,7 @@ range01 <- function(x) {
 
 ## Load background data ========================================================
 
-LS_grid <- readRDS(here("input", "LS_grid_preload.RDS")) |>
+LS_grid <- readRDS(here("input", "LS_grid_preload2.RDS")) |>
   st_transform(4326)
 
 # Cropping layer, for standardisation
@@ -144,7 +144,7 @@ LS_grid <- LS_grid |>
 if(1 == 2){
  feedlots  <- read.csv(here("input", "NSW_feedlots.csv"))
  piggeries <- read.csv(here("input", "NSW_piggeries.csv"))
- saleyards <- read.csv(here("input", "NSW_saleyards.csv"))
+ saleyards <- read.csv(here("input", "saleyards_nsw_4326_2023-05.csv"))
 
  risk_points <- bind_rows(feedlots[, c("category", "lat", "lon")],
                           piggeries[, c("category", "lat", "lon")],
