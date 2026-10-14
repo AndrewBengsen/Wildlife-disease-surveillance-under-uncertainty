@@ -108,32 +108,32 @@ if(1==2){
 
 ## Expected cattle density =====================================================
 # Adapted from Gridded Livestock of the World database (FAO 2024)
-# https://data.amerigeoss.org/dataset/9d1e149b-d63f-4213-978b-317a8eb42d02
+# https://data.apps.fao.org/catalog//iso/9d1e149b-d63f-4213-978b-317a8eb42d02
 
 cattle <- rast(here("input", "5_Ct_2020_Da_clip_4326.tif"))
 
-cattle[cattle > 6500] <- 0  # convert urban/sentinel errors to 0
+cattle[cattle > 100] <- 0  # convert urban/sentinel errors to 0
 
-cattle_range <- minmax(cattle, compute = TRUE)
-cattle <- (cattle - cattle_range[1]) / (cattle_range[2] - cattle_range[1])
+# Extract mean value for each risk map grid cell
+cattle_grid <- terra_extract_mean(cattle, LS_grid)
 
-# Fit to grid using mean raster value for each grid cell
+# Scale 0:1
 LS_grid <- LS_grid |>
-  mutate(LS_cattle = terra_extract_mean(cattle, LS_grid))
+  mutate(LS_cattle = range01(cattle_grid))
 
 
 ## Expected sheep density ======================================================
 # Adapted from Gridded Livestock of the World database (FAO 2024)
-# https://data.amerigeoss.org/dataset/9d1e149b-d63f-4213-978b-317a8eb42d02
+# https://data.apps.fao.org/catalog//iso/9d1e149b-d63f-4213-978b-317a8eb42d02
 
 sheep <- rast(here("input", "5_Sh_2020_Da_clip_4326.tif"))
 
-sheep[sheep > 6500] <- 0
-sheep_range <- minmax(sheep, compute = TRUE)
-sheep <- (sheep - sheep_range[1]) / (sheep_range[2] - sheep_range[1])
+sheep[sheep == 373.09647] <- 0    # convert urban error (Broken Hill) to 0
+
+sheep_grid <- terra_extract_mean(sheep, LS_grid)
 
 LS_grid <- LS_grid |>
-  mutate(LS_sheep = terra_extract_mean(sheep, LS_grid))
+  mutate(LS_sheep = range01(sheep_grid))
 
 ## Point hazards: piggeries, saleyards and feedlots ============================
 # As noted in the header, we do not provide point locations for these features
@@ -198,10 +198,10 @@ objective <- function(p, values) {
   
   # Reject this parameter set if quantile() failed
   # or if > 1 cut point lands on the same value
-  # The large penalty pushes optim() away without crashing it
+  # The large penalty pushes optim() away without killing it
   if (is.null(cuts) || anyDuplicated(cuts)) return(10^6) 
   
-  # Build the four breakpoints for cut()
+  # Four breakpoints for cut()
   grp_breaks <- c(-Inf, cuts[3], cuts[2], cuts[1], Inf)
   
   # Assign each cell's LS_tot value to a category
@@ -210,11 +210,15 @@ objective <- function(p, values) {
   # Mean LS_tot in each category, to check performance
   means <- tapply(values, grp, mean)
   
+  # Penalise any empty or broken categories to avoid failure
+  if (any(!is.finite(means))) return(10^6)
+  
   # Extract reference mean from "very low" category
   vh <- means["very low"]
-  
-  # Penalise any zero or non-finite mean for "very low" that will cause a failure
-  if (!is.finite(vh) || vh == 0) return(10^6)  
+
+  # Penalise any zero or non-finite mean for vh that will cause a failure
+  if (vh == 0) return(10^6)
+  if (!is.finite(vh)) return(10^6)  
   
   # Express target weights for each category as a ratio relative to "very low"
   target_ratio <- risk_weights[c("high", "moderate", "low")] / risk_weights["very_low"]
@@ -223,9 +227,16 @@ objective <- function(p, values) {
   # optim() will search for the cut quantiles (p) that minimise the error
   # and come closest to the target 9:7:3:1 relationship
   # err == 0 is a perfect match
-  err <- sum((c(means["high"], means["moderate"], means["low"]) / vh - target_ratio) ^ 2)
+  err <- sum((c(means["high"], means["moderate"], means["low"]) / vh - target_ratio)^2)
+  if (!is.finite(err)) return(10^6)   
   err
 }
+
+# Nelder-Mead has no bounds, so optimise over unconstrained values (theta) and
+# then map them back to bounded quantile probabilities (p) within the objective.
+
+lower <- c(0.30, 0.05, 0.001)
+upper <- c(0.99, 0.80, 0.500)
 
 # Optimiser starting values
 props <- risk_weights / sum(risk_weights)
@@ -234,19 +245,56 @@ p2 <- 1 - (props["high"] + props["moderate"])
 p3 <- 1 - (props["high"] + props["moderate"] + props["low"])
 par_init <- c(p1, p2, p3)
 
-res <- optim(par = par_init,
-             fn = objective,
-             values = LS_grid$LS_tot,
-             method = "L-BFGS-B",
-             lower = c(0.30, 0.05, 0.001),
-             upper = c(0.99, 0.80, 0.500))
+## Optimise cut-point quantiles
 
-p_opt <- sort(res$par, decreasing = TRUE)
-cuts  <- quantile(LS_grid_cat$LS_tot, probs = p_opt, na.rm = TRUE)
+# p (bounded) -> theta (unconstrained): rescale to (0,1), then logit
+p_to_theta <- function(p) qlogis((p - lower) / (upper - lower))
 
+# theta (unconstrained) -> p (bounded): inverse logit, then rescale to bounds
+theta_to_p <- function(theta) lower + (upper - lower) * plogis(theta)
+
+# Wrapper so optim() searches over theta; objective() still receives
+# probabilities (and sorts them internally, so ordering is always valid)
+objective_theta <- function(theta, values) objective(theta_to_p(theta), values)
+
+# Starting values on the theta scale
+theta_init <- p_to_theta(as.numeric(par_init))
+
+fit_nm <- function(theta0, values) {
+  optim(par     = theta0,
+        fn      = objective_theta,
+        values  = values,
+        method  = "Nelder-Mead",
+        control = list(maxit = 2000, reltol = 1e-10))
+}
+
+# The objective is piecewise constant (cut points jump between data values),
+# so a single Nelder-Mead run can stall on a plateau. Run from the original
+# starting point plus several jittered starts, and keep the best fit.
+set.seed(5678)
+n_starts <- 5
+starts <- rbind(theta_init,
+                t(replicate(n_starts - 1, theta_init + rnorm(3, sd = 1))))
+
+fits <- lapply(seq_len(nrow(starts)),
+               function(i) fit_nm(starts[i, ], LS_grid$LS_tot))
+
+errs <- vapply(fits, function(f) f$value, numeric(1))
+summary(errs)                       # spread across starts; 1e6 = penalty plateau
+best <- fits[[which.min(errs)]]
+best$value                          # 0 would be a perfect match to 9:7:3:1
+
+# Back-transform to quantile probabilities, ordered so p_opt[1] > p_opt[2] > p_opt[3]
+p_opt <- sort(theta_to_p(best$par), decreasing = TRUE)
+p_opt
+
+cuts <- quantile(LS_grid_cat$LS_tot, probs = p_opt, na.rm = TRUE)
+
+# It's a tricky optimisation: check performance
 grp_check <- category_breaks(LS_grid$LS_tot, c(-Inf, cuts[3], cuts[2], cuts[1], Inf))
 achieved_means <- tapply(LS_grid$LS_tot, grp_check, mean)
-message("Achieved risk ratios relative to 'very low' (target 1 / 3 / 7 / 9):") 
+
+# Achieved risk ratios relative to 'very low' (target 1 : 3 : 7 : 9) 
 round(achieved_means / achieved_means["very low"], 2)
 
 # Final categories
@@ -257,6 +305,13 @@ LS_grid <- LS_grid_cat |>
                            levels = c("high", "moderate", "low", "very low")))
 
 ## Plots ========================================================================
+
+LS_grid |> 
+  st_drop_geometry() |>
+  group_by(risk_category) |>
+  summarise(n = n()) |>
+  mutate(p = n/1873) |>
+  knitr::kable(digits=2)
 
 ggplot() +
   geom_sf(aes(fill = LS_tot), col = NA, data = LS_grid, show.legend = TRUE) +
@@ -272,7 +327,7 @@ ggplot() +
   labs(title = "Total expected introduction risk (categorical)")
 
 # Save for use in `BST_DBSCAN_synthetic_example_v1-1.R`
-st_write(LS_grid, here("input", "FMDV_risk_4326_v3.shp"), append = FALSE)
+st_write(LS_grid, here("input", "FMDV_risk_4326_v1-3.shp"), append = FALSE)
 
 ## Session info ================================================================
 

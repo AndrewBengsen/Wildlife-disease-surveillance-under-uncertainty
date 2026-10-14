@@ -75,7 +75,7 @@ effort_wt_fun <- function(cluster_current, risk_cat_prior){
 
 # LS_tot provides a risk rating for each cell, in the range 0:1
 # Transform from EPSG:4326 to projected EPSG:3308
-dat <- st_read("input", "FMDV_risk_4326_v3") |>
+dat <- st_read("input", "FMDV_risk_4326_v1-3") |>
   mutate(risk_cat = factor(rsk_ctg, 
                            levels = c("very low", "low", "moderate", "high"))) |>
   dplyr::select(cell, pig_dens = LS_pig, LS_tot, risk_cat) |>
@@ -290,8 +290,7 @@ effort_weights  <- effort_wt_fun(cl_grid$cluster, cl_grid$risk_cat)
 
 ## Update search values (beliefs) based on realised search effort ==============
 
-# Load a table showing how detection probability is expected to decline with
-# with diminishing sample sizes
+# Detection probability is expected to decline with diminishing sample sizes
 # (based on previously stated sample size assumptions)
 error_df <- read.csv(here("input", "error_df.csv")) |>
   arrange(desc(n)) 
@@ -313,7 +312,7 @@ cl_grid$detect_prob[is.na(cl_grid$detect_prob)] <- 0
 cl_grid$new_search_value <- update.priors(prior = cl_grid$risk_prior,
                                           detect_prob = cl_grid$detect_prob)
 
-# Check that the new search value sums to 1 across the state 
+# Check that the new search value sum to 1 
 sum(cl_grid$new_search_value)
 
 # Plot updated search values
@@ -413,8 +412,7 @@ ggplot() +
                            name="Expected search value") +
    labs(title = "Selected cells after intial update") +
    theme_void() +
-   theme(legend.position = "bottom",
-         legend.text = element_blank())
+   theme(legend.position = "bottom")
 
 ## Given the sampling effort, what was the realised SSe? =======================
 
@@ -423,7 +421,7 @@ ggplot() +
 # months, but looks back over a 12 month window. Using the updated map would 
 # assign many of the samples being considered to a "very low" risk category that
 # was only "very low" because of the presence of those samples.
-# This would greatly, and incorrectly, downgrade SSe
+# This would incorrectly SSe
 
 assign_cluster_risk <- function(hulls, dat) {
   ints <- st_intersects(hulls, dat)
@@ -466,7 +464,7 @@ boot_realised_se_sys <- function(hulls, dat, B = 2000, ...) {
   quantile(se_boot, c(0.025, 0.5, 0.975), na.rm = TRUE)
 }
 
-set.seed(666)
+set.seed(5678)
 realised_SSe_CI <- round(boot_realised_se_sys(hulls,  dat), 3)
 
 paste0("Realised SSe = ", realised_SSe_CI[2], " (95% CI = ", realised_SSe_CI[1],
