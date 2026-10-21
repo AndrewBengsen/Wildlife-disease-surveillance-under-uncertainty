@@ -93,7 +93,7 @@ proportion_by_risk <- dat |>
   group_by(risk_cat) |>
   summarise(n = n()) |>
   mutate(p=n/nrow(dat)) 
-proportion_by_risk
+knitr::kable(proportion_by_risk, digits = 3)
 
 ## Assign likelihood ===========================================================
 
@@ -141,6 +141,9 @@ high_risk_grid_prior <- LS_grid |>
 
 # How many cells in the top quartile?
 nrow(high_risk_grid_prior) 
+
+# Which cell has the greatest prior search value?
+high_risk_grid_prior[which.max(high_risk_grid_prior$search_value),]
 
 # Run the loop to select cells, weighted by (a) risk and (b) spatial dispersion 
 a <- 1 

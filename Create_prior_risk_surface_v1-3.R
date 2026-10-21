@@ -17,10 +17,10 @@
 ## We do not have the authority to share the base feral pig, goat and deer data.
 ## For privacy reasons, we are not sharing point locations of piggeries,
 ## saleyards and feedlots. Instead, we have pre-loaded the processed output
-## of these layers in `input/LS_grid_preload.RDS` (object: LS_grid). We
+## of these layers in `input/LS_grid_preload2.RDS` (object: LS_grid). We
 ## provide the processing code for the feral pig and point-hazard layers
 ## below for transparency; the code for deer and goats follows the same
-## logic as cattle/sheep below and is not reproduced here.
+## logic as for the feral pigs below and is not reproduced here.
 ##
 ## Graphical representations of the pig/deer/goat distribution data are
 ## available at:
@@ -29,7 +29,7 @@
 ## REQUIRED INPUTS (all under ./input/)
 ## - LLS_Layer.shp                    Local Land Services region boundaries,
 ##                                    used to clip layers
-## - LS_grid_preload.RDS              Pre-processed hex grid (see DATA note)
+## - LS_grid_preload2.RDS              Pre-processed hex grid (see DATA note)
 ##                                    Columns: cell, LS_pig, LS_goats, LS_deer,
 ##                                    LS_points, geometry
 ## - 5_Ct_2020_Da_clip_4326.tif       Cattle density, Gridded Livestock of the
@@ -328,6 +328,125 @@ ggplot() +
 
 # Save for use in `BST_DBSCAN_synthetic_example_v1-1.R`
 st_write(LS_grid, here("input", "FMDV_risk_4326_v1-3.shp"), append = FALSE)
+
+
+## Sensitivity analysis ========================================================
+
+# How much does the final risk map change if a layer weight is wrong? Each of
+# the five secondary layers is varied in turn across nine weights (0.1 to 0.5),
+# with all other weights held at their base values. The feral pig weight is held
+# constant (see the pig-vs-total comparison at the end). For each scenario the
+# total risk is rescaled to 0:1 and compared with the original map using RMSE,
+# Spearman correlation and the coefficient of variation (CV).
+
+LS_grid <- LS_grid |>
+  arrange(cell)
+
+# Base weights
+base_w <- c(LS_pig = LS_pig_w, LS_cattle = LS_cattle_w, LS_sheep = LS_sheep_w,
+            LS_goats = LS_goat_w, LS_deer = LS_deer_w, LS_points = LS_point_w)
+
+# Matrix of scaled layers (one column per layer, same order as base_w)
+layer_mat <- LS_grid |>
+  st_drop_geometry() |>
+  dplyr::select(all_of(names(base_w))) |>
+  as.matrix()
+
+# Layers to vary (column name = display label). Order sets the panel order below
+layer_labels <- c(LS_goats = "Goats", LS_cattle = "Cattle", LS_deer = "Deer",
+                  LS_sheep = "Sheep", LS_points = "Point hazards")
+
+weight_seq <- round(seq(0.1, 0.5, length.out = 9), 2)
+
+# Total risk (0:1) for a vector of layer weights.
+# Same calculation as in 'Combine layers' above
+risk_total <- function(w) {
+  range01(rowSums(sweep(layer_mat, 2, w, "*"), na.rm = TRUE))
+}
+
+# One scenario: `weight` on `layer`, base weights on everything else
+sens_scenario <- function(layer, weight) {
+  tibble(cell = LS_grid$cell,
+         LS_ref = LS_grid$LS_tot,    # original risk map
+         LS_tot = risk_total(replace(base_w, layer, weight)))
+}
+
+# Every layer x weight scenario, one row per cell per scenario
+sens <- expand_grid(layer = names(layer_labels), weight = weight_seq) |>
+  mutate(res = map2(layer, weight, sens_scenario)) |>
+  unnest(res)
+
+# Compare each scenario map with the original map
+sens_tab <- sens |>
+  group_by(layer, weight) |>
+  summarise(RMSE = sqrt(mean((LS_tot - LS_ref)^2, na.rm = TRUE)),
+            rho = cor(LS_tot, LS_ref, method = "spearman", use = "complete.obs"),
+            cv = sd(LS_tot, na.rm = TRUE) / mean(LS_tot, na.rm = TRUE),
+            .groups = "drop") |>
+  mutate(layer = factor(layer, levels = names(layer_labels), labels = layer_labels))
+
+print(sens_tab, n = Inf)
+
+# Layer and weight with the greatest impact on the risk map (largest RMSE)
+slice_max(sens_tab, RMSE)
+
+# Agreement with the original map at the highest weight, for each layer
+filter(sens_tab, weight == max(weight))
+
+## Sensitivity plots -----------------------------------------------------------
+
+# Maps of total risk at each weight for one layer (`lyr` = layer column name)
+plot_sens_map <- function(lyr) {
+  LS_grid |>
+    dplyr::select(cell) |>
+    inner_join(filter(sens, layer == lyr), by = "cell") |>
+    ggplot() +
+    geom_sf(aes(fill = LS_tot), col = NA, show.legend = FALSE) +
+    scico::scale_fill_scico(palette = "lajolla", direction = -1) +
+    facet_wrap(~weight) +
+    theme_void(base_size = 10)
+}
+
+sens_bar <- ggplot(sens_tab) +
+  geom_col(aes(RMSE, factor(weight))) +
+  scale_x_continuous(limits = c(0, 0.15)) +
+  lemon::facet_rep_wrap(~layer) +
+  labs(y = "Weight") +
+  theme_classic(base_size = 10) +
+  theme(strip.background = element_blank(),
+        axis.text.x = element_text(size = 7),
+        panel.spacing.x = unit(10, "pt"),
+        axis.text = element_text(colour = 1))
+sens_bar
+
+# RMSE panel (a) alongside the risk maps for one layer (b)
+combine_sens <- function(lyr) {
+  cowplot::plot_grid(sens_bar, plot_sens_map(lyr), ncol = 2,
+                     labels = c("a)", "b)"), rel_widths = c(0.5, 0.5),
+                     align = "v", axis = "b", rel_heights = c(1, 0.95))
+}
+
+dir.create(here("Figures"), showWarnings = FALSE)
+ggsave(here("Figures", "combined_sensitivity.png"), combine_sens("LS_cattle"),
+       height = 8, width = 18, units = "cm")
+
+## Is the total risk map just the feral pig layer? -----------------------------
+# Feral pigs carry the largest weight, so check how closely the total risk
+# tracks the pig layer alone
+
+range(LS_grid$LS_pig, na.rm = TRUE)
+range(LS_grid$LS_tot, na.rm = TRUE)
+
+df <- st_drop_geometry(LS_grid) |>
+  filter(!is.na(LS_pig))
+
+# Very highly correlated under current weightings (0.98, 0.94)
+cor(df$LS_pig, df$LS_tot, method = "pearson")
+cor(df$LS_pig, df$LS_tot, method = "spearman")
+
+# Lin's concordance correlation coefficient (CCC) is also high (0.96)
+DescTools::CCC(df$LS_pig, df$LS_tot)$rho.c
+
 
 ## Session info ================================================================
 
