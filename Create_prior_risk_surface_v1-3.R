@@ -253,8 +253,8 @@ p_to_theta <- function(p) qlogis((p - lower) / (upper - lower))
 # theta (unconstrained) -> p (bounded): inverse logit, then rescale to bounds
 theta_to_p <- function(theta) lower + (upper - lower) * plogis(theta)
 
-# Wrapper so optim() searches over theta; objective() still receives
-# probabilities (and sorts them internally, so ordering is always valid)
+# Have optim() search over theta; objective() still gets probabilities 
+# (and sorts them internally, so ordering is always valid)
 objective_theta <- function(theta, values) objective(theta_to_p(theta), values)
 
 # Starting values on the theta scale
@@ -269,8 +269,9 @@ fit_nm <- function(theta0, values) {
 }
 
 # The objective is piecewise constant (cut points jump between data values),
-# so a single Nelder-Mead run can stall on a plateau. Run from the original
-# starting point plus several jittered starts, and keep the best fit.
+# so a single Nelder-Mead run can get stuck on a plateau. Run from the original
+# starting point plus several jittered starts. Keep the best fit.
+
 set.seed(5678)
 n_starts <- 5
 starts <- rbind(theta_init,
