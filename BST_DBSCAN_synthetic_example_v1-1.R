@@ -71,6 +71,8 @@ effort_wt_fun <- function(cluster_current, risk_cat_prior){
     length(which(cluster_current  >=0))
 }
 
+
+
 ## Load the prior risk map =====================================================
 
 # LS_tot provides a risk rating for each cell, in the range 0:1
@@ -195,10 +197,7 @@ selected_prior$rank <- c(nrow(selected_prior):1)
 selected_prior <- selected_prior |>
   dplyr::select(-centroid)
 
-
 # Plot selected cells
-max_search_val <- max(LS_grid$search_value, na.rm=T)
-
 ggplot() +
   geom_sf(data = LS_grid, aes(fill = search_value), colour=NA, show.legend=T) +
   geom_sf(data = selected_prior, color = "white", size = 1, fill = NA) +
@@ -242,7 +241,7 @@ nrow(pig_sp)                      # N animals sampled
 length(unique(pig_sp$operation))  # N sampling operations
 pxy <- data.frame(x = pig_sp$x, y = pig_sp$y)
 
-# DBSCAN. eps km scaled converted to m to match the projected coordinates
+# DBSCAN: eps km scaled converted to m to match the projected coordinates
 Dbscan_p <- dbscan(pxy, eps = 1000*eps, minPts = minpts)
 
 # Assign cluster id to each sample 
@@ -266,10 +265,12 @@ hulls$n <- lengths(st_intersects(hulls, pig_sp))
 # Assign cluster values and cluster sample sizes to the risk map cells
 cl_grid <- st_join(dat, hulls, left = T) 
 
-# Note that this can induce duplication of some cells that intersect > 1 cluster
-# Although it doesn't with these synthetic data
-# Retain the duplicate row with the highest samples (lowest new_search_value)
-nrow(cl_grid)
+# NB: that this can induce duplication of some cells that intersect > 1 cluster,
+# although it doesn't with these synthetic data.
+# If it does, retain the duplicate row with the highest number of samples 
+# (lowest new_search_value)
+
+nrow(cl_grid) # Should be 1873
 cl_grid <- cl_grid |>
   group_by(cell) |>
   slice_max(coalesce(n, -Inf), n = 1, with_ties = FALSE) |>
@@ -312,7 +313,7 @@ cl_grid$detect_prob[is.na(cl_grid$detect_prob)] <- 0
 cl_grid$new_search_value <- update.priors(prior = cl_grid$risk_prior,
                                           detect_prob = cl_grid$detect_prob)
 
-# Check that the new search value sum to 1 
+# Check that the new search value sums to 1 across the state
 sum(cl_grid$new_search_value)
 
 # Plot updated search values
@@ -414,14 +415,14 @@ ggplot() +
    theme_void() +
    theme(legend.position = "bottom")
 
-## Given the sampling effort, what was the realised SSe? =======================
+## Given the realised sampling effort, what was the  modelled SSe? =============
 
 # Assign a dominant risk category (from the fixed original map) to each cluster
 # Use the original map, not the updated map, because updating occurs every three
 # months, but looks back over a 12 month window. Using the updated map would 
 # assign many of the samples being considered to a "very low" risk category that
 # was only "very low" because of the presence of those samples.
-# This would incorrectly SSe
+# This would incorrectly underestimate SSe
 
 assign_cluster_risk <- function(hulls, dat) {
   ints <- st_intersects(hulls, dat)
