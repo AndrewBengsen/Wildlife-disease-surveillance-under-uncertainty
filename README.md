@@ -1,6 +1,6 @@
 # Wildlife-disease-surveillance-under-uncertainty
 
-Reproducible workflow for: Bengsen et al., [Wildlife disease surveillance under uncertainty: an adaptive search-theoretic framework for early detection of transboundary animal diseases](https://doi.org/10.64898/2026.08.31.748179)
+Reproducible workflow for: Bengsen et al., [Adaptive wildlife disease surveillance under uncertainty: field evaluation of a search-theoretic framework for early detection](https://doi.org/10.64898/2026.08.31.748179)
 
 ## PURPOSE
 This script demonstrates the full workflow described in the Methods:  
